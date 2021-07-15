@@ -38,8 +38,20 @@ namespace ServerlessPatterns.DynamoDB.DataAccess {
             //  * customer must exist
             //  * customer can have at most 3 addresses
 
-            // TODO: add address to customer record
-            return false;
+            // add address to customer record
+            return await Table.UpdateItem(customerPrimaryKey)
+
+                // only update record if it exists
+                .WithCondition(record => DynamoCondition.Exists(record))
+
+                // only allow up to addresses
+                .WithCondition(record => DynamoCondition.Exists(record.Addresses[address.Label]) ||(DynamoCondition.Size(record.Addresses) < MAX_CUSTOMER_ADDRESSES))
+
+                // add/update address in record
+                .Set(record => record.Addresses[address.Label], address)
+
+                // execute UpdateItem operation
+                .ExecuteAsync(cancellationToken);
         }
 
         public async Task<bool> RemoveCustomerAddressAsync(DynamoPrimaryKey<CustomerRecord> customerPrimaryKey, string addressLabel, CancellationToken cancellationToken = default) {
@@ -48,8 +60,17 @@ namespace ServerlessPatterns.DynamoDB.DataAccess {
             //  * customer must exist
             //  * address must exist
 
-            // TODO: remove address from customer record
-            return false;
+            // remove address from customer record
+            return await Table.UpdateItem(customerPrimaryKey)
+
+                // only update record if it exists
+                .WithCondition(record => DynamoCondition.Exists(record))
+
+                // remove entry from Addresses property
+                .Remove(record => record.Addresses[addressLabel])
+
+                // execute UpdateItem operation
+                .ExecuteAsync(cancellationToken);
         }
 
         public async Task<bool> CreateOrderRecordAsync(OrderRecord order, CancellationToken cancellationToken = default) {
@@ -60,13 +81,35 @@ namespace ServerlessPatterns.DynamoDB.DataAccess {
             //  * only allow 10 pending orders for a customer
 
             // add order for customer
-            return false;
+            return await Table.TransactWriteItems()
+
+                // update PendingOrders counter
+                .BeginUpdateItem(DataModel.GetPrimaryKeyForCustomerRecord(order.CustomerId))
+
+                    // customer cannot have too many pending orders
+                    .WithCondition(record => record.PendingOrders < MAX_PENDING_ORDERS)
+
+                    // increase pending order count
+                    .Set(record => record.PendingOrders, record => record.PendingOrders + 1)
+                .End()
+
+                // store new order record
+                .BeginPutItem(order.GetPrimaryKey(), order)
+                    .WithCondition(record => DynamoCondition.DoesNotExist(record))
+                .End()
+
+                // execute TransactWriteItems operation
+                .TryExecuteAsync(cancellationToken);
         }
 
         public async Task<(CustomerRecord Customer, IEnumerable<OrderRecord> Orders)> FindCustomerAndRecentOrderRecordsAsync(DynamoPrimaryKey<CustomerRecord> customerPrimaryKey, int limit, CancellationToken cancellationToken = default) {
 
-            // TODO: fetch customer record and most recent orders in a single operation
-            return (Customer: null, Orders: Enumerable.Empty<OrderRecord>());
+            // fetch customer record and most recent orders in a single operation
+            var items = await Table.Query(DataModel.SelectCustomerAndOrderRecords(customerPrimaryKey), limit: limit, scanIndexForward: false)
+                .ExecuteAsync();
+
+            // parse records into expected types
+            return (Customer: items.OfType<CustomerRecord>().Single(), Orders: items.OfType<OrderRecord>());
         }
     }
 }
