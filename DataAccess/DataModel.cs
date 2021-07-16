@@ -28,7 +28,7 @@ namespace ServerlessPatterns.DynamoDB.DataAccess {
 
         public static IDynamoQueryClause SelectCustomerAndOrderRecords(DynamoPrimaryKey<CustomerRecord> customerPrimaryKey)
             => DynamoQuery.SelectPK(customerPrimaryKey.PKValue)
-                .WhereSKMatchesAny()
+                .WhereSKIsLessThanOrEquals(CUSTOMER_RECORD_SK_FORMAT)
                 .WithTypeFilter<CustomerRecord>()
                 .WithTypeFilter<OrderRecord>();
     }
