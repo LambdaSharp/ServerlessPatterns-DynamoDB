@@ -45,7 +45,10 @@ namespace ServerlessPatterns.DynamoDB.DataAccess {
                 .WithCondition(record => DynamoCondition.Exists(record))
 
                 // only allow up to addresses
-                .WithCondition(record => DynamoCondition.Exists(record.Addresses[address.Label]) ||(DynamoCondition.Size(record.Addresses) < MAX_CUSTOMER_ADDRESSES))
+                .WithCondition(record =>
+                    DynamoCondition.Exists(record.Addresses[address.Label])
+                    || (DynamoCondition.Size(record.Addresses) < MAX_CUSTOMER_ADDRESSES)
+                )
 
                 // add/update address in record
                 .Set(record => record.Addresses[address.Label], address)
